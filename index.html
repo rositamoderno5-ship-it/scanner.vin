@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner VIN - Logistica</title>
+    <title>Scanner VIN Rigoroso - Logistica</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -15,8 +15,8 @@
         .btn-excel { background-color: #2e7d32; color: white; }
         .btn-clear { background-color: #c62828; color: white; }
         .counter { font-size: 18px; text-align: center; margin: 15px 0; font-weight: bold; color: #2c3e50; }
-        ul { list-style: none; padding: 0; max-width: 500px; margin: 0 auto; }
-        li { background: white; padding: 10px 15px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        #vin-list { list-style: none; padding: 0; max-width: 500px; margin: 0 auto; }
+        #vin-list li { background: white; padding: 10px 15px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
@@ -40,24 +40,25 @@
     <script>
         let vinDatabase = [];
 
-        function extractStrict17VIN(scannedText) {
-            // 1. Rimuove asterischi (*), spazi e caratteri speciali di controllo
+        function extractStrictValidVIN(scannedText) {
+            // 1. Pulizia totale della stringa (rimuove asterischi e spazi)
             let clean = scannedText.replace(/[* ]/g, '').trim().toUpperCase();
 
-            // 2. REGEX RIGIDO VIN ISO 3779:
-            // Cerca una sequenza di ESATTAMENTE 17 caratteri alfanumerici (escludendo le lettere I, O, Q per norma ISO)
-            let match = clean.match(/[A-HJ-NPR-Z0-9]{17}/);
+            // 2. FILTRO REGEX RIGOROSO (ISO 3779):
+            // Cerca una sequenza di ESATTAMENTE 17 caratteri alfanumerici.
+            // Esclude esplicitamente le lettere I, O, Q (per norma ISO, non usate nei VIN per evitare errori).
+            let vinRegex = /^[A-HJ-NPR-Z0-9]{17}$/;
 
-            if (match) {
-                return match[0]; // Restituisce SOLO ed ESCLUSIVAMENTE il VIN a 17 caratteri (es: ZFA5FBBT1TJ136084)
+            if (vinRegex.test(clean)) {
+                return clean; // Restituisce il VIN a 17 caratteri (es: ZFA5FBBT1TJ136084)
             }
 
-            // Se non ha esattamente 17 caratteri standard VIN, RIFIUTA il codice
+            // Se non rispetta il formato a 17 caratteri ISO, RIFIUTA il codice
             return null;
         }
 
         function onScanSuccess(decodedText) {
-            let validVIN = extractStrict17VIN(decodedText);
+            let validVIN = extractStrictValidVIN(decodedText);
 
             if (validVIN) {
                 if (!vinDatabase.includes(validVIN)) {
@@ -67,7 +68,7 @@
                     if (navigator.vibrate) navigator.vibrate(200);
                 }
             } else {
-                console.log("Codice scartato perché non è un VIN a 17 caratteri:", decodedText);
+                console.log("Codice scartato (non è un VIN standard da 17 caratteri):", decodedText);
             }
         }
 
