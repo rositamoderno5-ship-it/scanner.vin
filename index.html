@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner VIN - Logistica Trasporti</title>
+    <!-- Libreria per la scansione da fotocamera -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- Libreria per esportare in formato Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f6f9; }
+        h2 { text-align: center; color: #1a365d; }
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; border-radius: 8px; overflow: hidden; }
+        .controls { display: flex; gap: 10px; margin-top: 15px; justify-content: center; }
+        button { padding: 12px 20px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .btn-excel { background-color: #2e7d32; color: white; }
+        .btn-clear { background-color: #c62828; color: white; }
+        .counter { font-size: 18px; text-align: center; margin: 15px 0; font-weight: bold; color: #2c3e50; }
+        ul { list-style: none; padding: 0; max-width: 500px; margin: 0 auto; }
+        li { background: white; padding: 10px 15px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+
+    <h2>Scanner VIN Logistica</h2>
+    
+    <div id="reader"></div>
+
+    <div class="counter">
+        VIN Acquisiti: <span id="count">0</span>
+    </div>
+
+    <div class="controls">
+        <button class="btn-excel" onclick="exportToExcel()">Scarica File Excel</button>
+        <button class="btn-clear" onclick="clearList()">Azzera Lista</button>
+    </div>
+
+    <h3>Lista Telai:</h3>
+    <ul id="vin-list"></ul>
+
+    <script>
+        let vinDatabase = [];
+
+        // Validazione VIN: Cerca una stringa alfanumerica di 17 caratteri (escludendo I, O, Q)
+        // Se l'etichetta aggiunge asterischi (es. *ZFA5FBBT1TJ136084*), li rimuoviamo
+        function cleanAndValidateVIN(scannedText) {
+            let cleaned = scannedText.replace(/\*/g, '').trim();
+            
+            // Regex standard per VIN a 17 caratteri
+            let vinRegex = /[A-HJ-NPR-Z0-9]{17}/i;
+            let match = cleaned.match(vinRegex);
+            
+            return match ? match[0].toUpperCase() : null;
+        }
+
+        function onScanSuccess(decodedText) {
+            let validVIN = cleanAndValidateVIN(decodedText);
+
+            if (validVIN) {
+                if (!vinDatabase.includes(validVIN)) {
+                    vinDatabase.push(validVIN);
+                    updateUI();
+                    
+                    // Feedback sonoro/vibrazione
+                    if (navigator.vibrate) navigator.vibrate(200);
+                }
+            } else {
+                console.log("Codice scartato (non è un VIN):", decodedText);
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('count').innerText = vinDatabase.length;
+            let listElement = document.getElementById('vin-list');
+            listElement.innerHTML = '';
+            
+            vinDatabase.slice().reverse().forEach((vin, index) => {
+                let li = document.createElement('li');
+                li.innerHTML = `<span><strong>#${vinDatabase.length - index}</strong> ${vin}</span>`;
+                listElement.appendChild(li);
+            });
+        }
+
+        function exportToExcel() {
+            if (vinDatabase.length === 0) {
+                alert("Nessun VIN scansionato!");
+                return;
+            }
+
+            // Preparazione dati per Excel
+            let data = vinDatabase.map((vin, i) => ({ "N°": i + 1, "Codice VIN (Telaio)": vin, "Data/Ora Acquisizione": new Date().toLocaleString() }));
+            
+            let worksheet = XLSX.utils.json_to_sheet(data);
+            let workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Telai");
+
+            // Download file .xlsx
+            XLSX.writeFile(workbook, `Scansione_VIN_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        function clearList() {
+            if (confirm("Vuoi davvero cancellare la lista?")) {
+                vinDatabase = [];
+                updateUI();
+            }
+        }
+
+        // Avvio dello scanner della fotocamera posteriore
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { fps: 10, qrbox: { width: 300, height: 150 } },
+            /* verbose= */ false
+        );
+        html5QrcodeScanner.render(onScanSuccess);
+    </script>
+
+</body>
+</html>
