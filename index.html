@@ -3,248 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner VIN Logistica Professionale</title>
-    <!-- Libreria Scanner Barcode/QR ad alta risoluzione -->
-    <script src="https://unpkg.com/@zxing/library@latest"></script>
-    <!-- Libreria per esportare in Excel -->
+    <title>Lettore Modello e Telaio Logistica</title>
+    <!-- Libreria OCR per la lettura del testo visibile -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- Libreria per l'esportazione Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             margin: 0; 
             padding: 15px; 
-            background-color: #f4f6f9; 
-            color: #333;
+            background-color: #f1f5f9; 
+            color: #0f172a;
         }
-        h2 { text-align: center; color: #1a365d; margin-top: 5px; margin-bottom: 15px; }
+        h2 { text-align: center; color: #1e293b; margin-bottom: 20px; }
         
-        .scanner-container {
-            position: relative;
-            width: 100%;
+        .upload-section {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
             max-width: 500px;
             margin: 0 auto;
-            border-radius: 12px;
-            overflow: hidden;
-            background: #000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        video {
-            width: 100%;
-            height: auto;
-            display: block;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
-        .scan-overlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 85%;
-            height: 80px;
-            border: 2px solid #00ff66;
-            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4);
-            border-radius: 8px;
-            pointer-events: none;
-        }
-
-        .scan-line {
-            position: absolute;
-            width: 100%;
-            height: 2px;
-            background: #00ff66;
-            box-shadow: 0 0 8px #00ff66;
-            animation: scan 1.5s infinite ease-in-out;
-        }
-
-        @keyframes scan {
-            0% { top: 0%; }
-            50% { top: 100%; }
-            100% { top: 0%; }
-        }
-
-        .file-input-wrapper {
-            text-align: center;
-            margin: 15px 0;
-        }
-
-        .file-btn {
-            background-color: #0284c7;
+        .btn-upload {
+            background-color: #2563eb;
             color: white;
-            padding: 10px 16px;
-            border-radius: 6px;
+            padding: 14px 20px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 16px;
             font-weight: bold;
             display: inline-block;
+            width: 80%;
         }
 
         input[type="file"] { display: none; }
 
-        .counter { font-size: 18px; text-align: center; margin: 15px 0; font-weight: bold; color: #1e293b; }
-        
-        .controls { display: flex; gap: 10px; margin-top: 15px; justify-content: center; }
-        button { padding: 12px 18px; font-size: 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .btn-excel { background-color: #16a34a; color: white; }
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+            color: #64748b;
+        }
+
+        .counter { font-size: 18px; text-align: center; margin: 20px 0; font-weight: bold; }
+
+        .controls { display: flex; gap: 10px; justify-content: center; max-width: 500px; margin: 0 auto; }
+        button { padding: 12px 18px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .btn-excel { background-color: #16a34a; color: white; flex: 1; }
         .btn-clear { background-color: #dc2626; color: white; }
 
-        ul { list-style: none; padding: 0; max-width: 500px; margin: 20px auto 0 auto; }
-        li { 
-            background: white; 
-            padding: 12px 15px; 
-            margin-bottom: 8px; 
-            border-radius: 6px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
-            font-family: monospace;
-            font-size: 15px;
+        table {
+            width: 100%;
+            max-width: 500px;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        .vin-tag { font-weight: bold; color: #0f172a; }
+
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0; }
+        th { background-color: #334155; color: white; }
+        .tag-modello { font-weight: bold; color: #0284c7; }
+        .tag-telaio { font-weight: bold; color: #16a34a; font-family: monospace; font-size: 16px; }
     </style>
 </head>
 <body>
 
-    <h2>Scanner VIN Logistica</h2>
+    <h2>Acquisizione Modello & Telaio</h2>
 
-    <!-- Area Fotocamera Live -->
-    <div class="scanner-container">
-        <video id="video"></video>
-        <div class="scan-overlay">
-            <div class="scan-line"></div>
-        </div>
-    </div>
-
-    <!-- Tasto per testare caricamento Immagine/Foto -->
-    <div class="file-input-wrapper">
-        <label for="image-upload" class="file-btn">Seleziona / Scatta Foto da Galleria</label>
-        <input type="file" id="image-upload" accept="image/*">
+    <div class="upload-section">
+        <label for="image-input" class="btn-upload">📷 Scatta o Carica Foto</label>
+        <input type="file" id="image-input" accept="image/*" capture="environment">
+        <div id="status">Pronto per la lettura</div>
     </div>
 
     <div class="counter">
-        VIN Validi Acquisiti: <span id="count">0</span>
+        Schede Elaborate: <span id="count">0</span>
     </div>
 
     <div class="controls">
-        <button class="btn-excel" onclick="exportToExcel()">Scarica File Excel</button>
-        <button class="btn-clear" onclick="clearList()">Azzera Lista</button>
+        <button class="btn-excel" onclick="exportToExcel()">Scarica Excel</button>
+        <button class="btn-clear" onclick="clearList()">Azzera</button>
     </div>
 
-    <h3 style="text-align: center; margin-top: 25px; color: #334155;">Lista Telai Acquisiti:</h3>
-    <ul id="vin-list"></ul>
+    <table>
+        <thead>
+            <tr>
+                <th>N°</th>
+                <th>Modello (3 cifre)</th>
+                <th>Telaio (8 caratteri)</th>
+            </tr>
+        </thead>
+        <tbody id="data-table">
+            <!-- I dati visivi compariranno qui -->
+        </tbody>
+    </table>
 
     <script>
-        let vinDatabase = [];
-        const codeReader = new ZXing.BrowserMultiFormatReader();
-        const videoElement = document.getElementById('video');
+        let records = [];
 
-        // REGEX RIGIDA VIN ISO 3779 (Esattamente 17 caratteri alfanumerici, no lettere I, O, Q)
-        function extractStrict17VIN(scannedText) {
-            if (!scannedText) return null;
-            
-            // Pulisce la stringa eliminando spazi, asterischi e trattini
-            let clean = scannedText.replace(/[* \-_]/g, '').trim().toUpperCase();
+        document.getElementById('image-input').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
 
-            // Cerca una sequenza di ESATTAMENTE 17 caratteri VIN validi
-            let match = clean.match(/[A-HJ-NPR-Z0-9]{17}/);
+            const statusEl = document.getElementById('status');
+            statusEl.innerText = "⏳ Lettura testo in corso...";
 
-            if (match) {
-                return match[0]; // Ritorna solo il VIN da 17 caratteri (es. ZFA5FBBT1TJ136084 o VYENJ5BT0TPU11937)
-            }
-            return null;
-        }
+            try {
+                // Analisi OCR della foto caricata
+                const worker = await Tesseract.createWorker('eng');
+                const ret = await worker.recognize(file);
+                await worker.terminate();
 
-        // Gestione Aggiunta VIN in lista
-        function processCode(rawText) {
-            let validVIN = extractStrict17VIN(rawText);
+                const text = ret.data.text.toUpperCase();
+                console.log("Testo rilevato dall'immagine:\n", text);
 
-            if (validVIN) {
-                if (!vinDatabase.includes(validVIN)) {
-                    vinDatabase.push(validVIN);
-                    updateUI();
-                    
-                    // Feedback sonoro/vibrazione
+                // Estrazione Modello (3 cifre) e Telaio (8 caratteri alfanumerici)
+                const parsedData = parseModelloETelaio(text);
+
+                if (parsedData.modello && parsedData.telaio) {
+                    records.push(parsedData);
+                    updateTable();
+                    statusEl.innerText = "✅ Acquisito con successo!";
                     if (navigator.vibrate) navigator.vibrate(200);
+                } else {
+                    statusEl.innerText = "❌ Impossibile rilevare Modello/Telaio. Riprova con una foto più nitida.";
                 }
-            } else {
-                console.log("Codice ignorato (Non è un VIN a 17 caratteri):", rawText);
+
+            } catch (err) {
+                console.error(err);
+                statusEl.innerText = "❌ Errore durante la lettura.";
             }
+
+            // Resetta l'input file per permettere di scattare nuovamente la stessa foto se necessario
+            e.target.value = '';
+        });
+
+        function parseModelloETelaio(text) {
+            let modello = null;
+            let telaio = null;
+
+            // Pulisce il testo e splitta per linee/parole
+            const lines = text.split('\n');
+
+            // Cerca Modello (3 cifre numeriche)
+            const modelloMatch = text.match(/\b\d{3}\b/);
+            if (modelloMatch) {
+                modello = modelloMatch[0];
+            }
+
+            // Cerca Telaio (8 caratteri alfanumerici es. TJ136084, TPU13059)
+            const telaioMatch = text.match(/\b[A-Z]{2,3}\d{5,6}\b/);
+            if (telaioMatch) {
+                telaio = telaioMatch[0];
+            }
+
+            return { modello, telaio };
         }
 
-        function updateUI() {
-            document.getElementById('count').innerText = vinDatabase.length;
-            let listElement = document.getElementById('vin-list');
-            listElement.innerHTML = '';
-            
-            vinDatabase.slice().reverse().forEach((vin, index) => {
-                let li = document.createElement('li');
-                li.innerHTML = `<span>#${vinDatabase.length - index}</span> <span class="vin-tag">${vin}</span>`;
-                listElement.appendChild(li);
+        function updateTable() {
+            document.getElementById('count').innerText = records.length;
+            const tableBody = document.getElementById('data-table');
+            tableBody.innerHTML = '';
+
+            records.slice().reverse().forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${records.length - index}</td>
+                    <td class="tag-modello">${item.modello}</td>
+                    <td class="tag-telaio">${item.telaio}</td>
+                `;
+                tableBody.appendChild(row);
             });
         }
 
-        // Avvio Scansione Dal Vivo da Fotocamera
-        function startCameraScanner() {
-            codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
-                if (result) {
-                    processCode(result.text);
-                }
-            }).catch(err => console.error("Errore avvio fotocamera:", err));
-        }
-
-        // Lettura da Immagine/Foto caricata dal file o Galleria
-        document.getElementById('image-upload').addEventListener('change', function (e) {
-            if (e.target.files.length === 0) return;
-
-            const file = e.target.files[0];
-            const reader = new FileReader();
-
-            reader.onload = function (event) {
-                const img = new Image();
-                img.src = event.target.result;
-                img.onload = function () {
-                    codeReader.decodeFromImageElement(img).then(result => {
-                        processCode(result.text);
-                    }).catch(err => {
-                        alert("Impossibile decodificare il VIN da questa immagine. Assicurati che l'ultimo codice in basso sia a fuoco o inquadralo dal vivo con la fotocamera.");
-                    });
-                };
-            };
-            reader.readAsDataURL(file);
-        });
-
-        // Generazione del File Excel (.xlsx)
         function exportToExcel() {
-            if (vinDatabase.length === 0) {
-                alert("Nessun VIN ancora acquisito!");
+            if (records.length === 0) {
+                alert("Nessun dato da esportare!");
                 return;
             }
 
-            let data = vinDatabase.map((vin, i) => ({ 
-                "N°": i + 1, 
-                "Codice VIN (Telaio)": String(vin), 
-                "Data/Ora Acquisizione": new Date().toLocaleString() 
+            const excelData = records.map((item, i) => ({
+                "N°": i + 1,
+                "MODELLO": item.modello,
+                "TELAIO": item.telaio,
+                "DATA ACQUISIZIONE": new Date().toLocaleString()
             }));
-            
-            let worksheet = XLSX.utils.json_to_sheet(data);
-            worksheet['!cols'] = [{ wch: 6 }, { wch: 25 }, { wch: 22 }];
 
-            let workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Telai_VIN");
+            const worksheet = XLSX.utils.json_to_sheet(excelData);
+            worksheet['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 20 }, { wch: 22 }];
 
-            XLSX.writeFile(workbook, `Report_VIN_Trasporti_${new Date().toISOString().slice(0,10)}.xlsx`);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Modello_Telaio");
+
+            XLSX.writeFile(workbook, `Report_Modello_Telaio_${new Date().toISOString().slice(0,10)}.xlsx`);
         }
 
         function clearList() {
-            if (confirm("Vuoi davvero cancellare tutti i VIN inseriti?")) {
-                vinDatabase = [];
-                updateUI();
+            if (confirm("Cancellare tutti i dati registrati?")) {
+                records = [];
+                updateTable();
+                document.getElementById('status').innerText = "Pronto per la lettura";
             }
         }
-
-        // Avvio automatico all'apertura della pagina
-        window.addEventListener('load', startCameraScanner);
     </script>
 </body>
 </html>
