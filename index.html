@@ -3,30 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner VIN Rigoroso - Logistica</title>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <title>Scanner VIN Logistica Professionale</title>
+    <!-- Libreria Scanner Barcode/QR ad alta risoluzione -->
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <!-- Libreria per esportare in Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f6f9; }
-        h2 { text-align: center; color: #1a365d; margin-bottom: 10px; }
-        #reader { width: 100%; max-width: 500px; margin: 0 auto; border-radius: 8px; overflow: hidden; background: #fff; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            margin: 0; 
+            padding: 15px; 
+            background-color: #f4f6f9; 
+            color: #333;
+        }
+        h2 { text-align: center; color: #1a365d; margin-top: 5px; margin-bottom: 15px; }
+        
+        .scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 85%;
+            height: 80px;
+            border: 2px solid #00ff66;
+            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: #00ff66;
+            box-shadow: 0 0 8px #00ff66;
+            animation: scan 1.5s infinite ease-in-out;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            50% { top: 100%; }
+            100% { top: 0%; }
+        }
+
+        .file-input-wrapper {
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .file-btn {
+            background-color: #0284c7;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        input[type="file"] { display: none; }
+
+        .counter { font-size: 18px; text-align: center; margin: 15px 0; font-weight: bold; color: #1e293b; }
+        
         .controls { display: flex; gap: 10px; margin-top: 15px; justify-content: center; }
         button { padding: 12px 18px; font-size: 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .btn-excel { background-color: #2e7d32; color: white; }
-        .btn-clear { background-color: #c62828; color: white; }
-        .counter { font-size: 18px; text-align: center; margin: 15px 0; font-weight: bold; color: #2c3e50; }
-        #vin-list { list-style: none; padding: 0; max-width: 500px; margin: 0 auto; }
-        #vin-list li { background: white; padding: 10px 15px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .btn-excel { background-color: #16a34a; color: white; }
+        .btn-clear { background-color: #dc2626; color: white; }
+
+        ul { list-style: none; padding: 0; max-width: 500px; margin: 20px auto 0 auto; }
+        li { 
+            background: white; 
+            padding: 12px 15px; 
+            margin-bottom: 8px; 
+            border-radius: 6px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+            font-family: monospace;
+            font-size: 15px;
+        }
+        .vin-tag { font-weight: bold; color: #0f172a; }
     </style>
 </head>
 <body>
 
     <h2>Scanner VIN Logistica</h2>
-    
-    <div id="reader"></div>
+
+    <!-- Area Fotocamera Live -->
+    <div class="scanner-container">
+        <video id="video"></video>
+        <div class="scan-overlay">
+            <div class="scan-line"></div>
+        </div>
+    </div>
+
+    <!-- Tasto per testare caricamento Immagine/Foto -->
+    <div class="file-input-wrapper">
+        <label for="image-upload" class="file-btn">Seleziona / Scatta Foto da Galleria</label>
+        <input type="file" id="image-upload" accept="image/*">
+    </div>
 
     <div class="counter">
-        VIN Acquisiti: <span id="count">0</span>
+        VIN Validi Acquisiti: <span id="count">0</span>
     </div>
 
     <div class="controls">
@@ -34,41 +131,44 @@
         <button class="btn-clear" onclick="clearList()">Azzera Lista</button>
     </div>
 
-    <h3 style="text-align: center; margin-top: 20px;">Lista Telai Scansionati:</h3>
+    <h3 style="text-align: center; margin-top: 25px; color: #334155;">Lista Telai Acquisiti:</h3>
     <ul id="vin-list"></ul>
 
     <script>
         let vinDatabase = [];
+        const codeReader = new ZXing.BrowserMultiFormatReader();
+        const videoElement = document.getElementById('video');
 
-        function extractStrictValidVIN(scannedText) {
-            // 1. Pulizia totale della stringa (rimuove asterischi e spazi)
-            let clean = scannedText.replace(/[* ]/g, '').trim().toUpperCase();
+        // REGEX RIGIDA VIN ISO 3779 (Esattamente 17 caratteri alfanumerici, no lettere I, O, Q)
+        function extractStrict17VIN(scannedText) {
+            if (!scannedText) return null;
+            
+            // Pulisce la stringa eliminando spazi, asterischi e trattini
+            let clean = scannedText.replace(/[* \-_]/g, '').trim().toUpperCase();
 
-            // 2. FILTRO REGEX RIGOROSO (ISO 3779):
-            // Cerca una sequenza di ESATTAMENTE 17 caratteri alfanumerici.
-            // Esclude esplicitamente le lettere I, O, Q (per norma ISO, non usate nei VIN per evitare errori).
-            let vinRegex = /^[A-HJ-NPR-Z0-9]{17}$/;
+            // Cerca una sequenza di ESATTAMENTE 17 caratteri VIN validi
+            let match = clean.match(/[A-HJ-NPR-Z0-9]{17}/);
 
-            if (vinRegex.test(clean)) {
-                return clean; // Restituisce il VIN a 17 caratteri (es: ZFA5FBBT1TJ136084)
+            if (match) {
+                return match[0]; // Ritorna solo il VIN da 17 caratteri (es. ZFA5FBBT1TJ136084 o VYENJ5BT0TPU11937)
             }
-
-            // Se non rispetta il formato a 17 caratteri ISO, RIFIUTA il codice
             return null;
         }
 
-        function onScanSuccess(decodedText) {
-            let validVIN = extractStrictValidVIN(decodedText);
+        // Gestione Aggiunta VIN in lista
+        function processCode(rawText) {
+            let validVIN = extractStrict17VIN(rawText);
 
             if (validVIN) {
                 if (!vinDatabase.includes(validVIN)) {
                     vinDatabase.push(validVIN);
                     updateUI();
                     
+                    // Feedback sonoro/vibrazione
                     if (navigator.vibrate) navigator.vibrate(200);
                 }
             } else {
-                console.log("Codice scartato (non è un VIN standard da 17 caratteri):", decodedText);
+                console.log("Codice ignorato (Non è un VIN a 17 caratteri):", rawText);
             }
         }
 
@@ -79,21 +179,52 @@
             
             vinDatabase.slice().reverse().forEach((vin, index) => {
                 let li = document.createElement('li');
-                li.innerHTML = `<span><strong>#${vinDatabase.length - index}</strong> ${vin}</span>`;
+                li.innerHTML = `<span>#${vinDatabase.length - index}</span> <span class="vin-tag">${vin}</span>`;
                 listElement.appendChild(li);
             });
         }
 
+        // Avvio Scansione Dal Vivo da Fotocamera
+        function startCameraScanner() {
+            codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+                if (result) {
+                    processCode(result.text);
+                }
+            }).catch(err => console.error("Errore avvio fotocamera:", err));
+        }
+
+        // Lettura da Immagine/Foto caricata dal file o Galleria
+        document.getElementById('image-upload').addEventListener('change', function (e) {
+            if (e.target.files.length === 0) return;
+
+            const file = e.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function (event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = function () {
+                    codeReader.decodeFromImageElement(img).then(result => {
+                        processCode(result.text);
+                    }).catch(err => {
+                        alert("Impossibile decodificare il VIN da questa immagine. Assicurati che l'ultimo codice in basso sia a fuoco o inquadralo dal vivo con la fotocamera.");
+                    });
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Generazione del File Excel (.xlsx)
         function exportToExcel() {
             if (vinDatabase.length === 0) {
-                alert("Nessun VIN scansionato!");
+                alert("Nessun VIN ancora acquisito!");
                 return;
             }
 
             let data = vinDatabase.map((vin, i) => ({ 
                 "N°": i + 1, 
-                "Codice VIN (17 Caratteri)": String(vin), 
-                "Data/Ora Scansione": new Date().toLocaleString() 
+                "Codice VIN (Telaio)": String(vin), 
+                "Data/Ora Acquisizione": new Date().toLocaleString() 
             }));
             
             let worksheet = XLSX.utils.json_to_sheet(data);
@@ -102,30 +233,18 @@
             let workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Telai_VIN");
 
-            XLSX.writeFile(workbook, `Report_VIN_${new Date().toISOString().slice(0,10)}.xlsx`);
+            XLSX.writeFile(workbook, `Report_VIN_Trasporti_${new Date().toISOString().slice(0,10)}.xlsx`);
         }
 
         function clearList() {
-            if (confirm("Vuoi davvero azzerare la lista dei VIN?")) {
+            if (confirm("Vuoi davvero cancellare tutti i VIN inseriti?")) {
                 vinDatabase = [];
                 updateUI();
             }
         }
 
-        let html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", 
-            { 
-                fps: 15, 
-                qrbox: { width: 320, height: 120 },
-                aspectRatio: 1.0,
-                experimentalFeatures: {
-                    useBarCodeDetectorIfSupported: true
-                }
-            },
-            false
-        );
-        html5QrcodeScanner.render(onScanSuccess);
+        // Avvio automatico all'apertura della pagina
+        window.addEventListener('load', startCameraScanner);
     </script>
-
 </body>
 </html>
