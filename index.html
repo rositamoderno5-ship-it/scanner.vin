@@ -3,55 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lettore Modello e Telaio Logistica</title>
-    <!-- Libreria OCR per la lettura del testo visibile -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <!-- Libreria per l'esportazione Excel -->
+    <title>Scanner Modello e Telaio Logistica</title>
+    <!-- Libreria scanner originale -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- Libreria per esportare in Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
             margin: 0; 
             padding: 15px; 
-            background-color: #f1f5f9; 
-            color: #0f172a;
+            background-color: #f4f6f9; 
+            color: #333;
         }
-        h2 { text-align: center; color: #1e293b; margin-bottom: 20px; }
+        h2 { text-align: center; color: #1a365d; margin-top: 5px; margin-bottom: 15px; }
         
-        .upload-section {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
+        #reader {
+            width: 100%;
             max-width: 500px;
             margin: 0 auto;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            background: #fff;
         }
 
-        .btn-upload {
-            background-color: #2563eb;
+        .file-input-wrapper {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .file-btn {
+            background-color: #0284c7;
             color: white;
-            padding: 14px 20px;
+            padding: 12px 20px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
             display: inline-block;
-            width: 80%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
 
         input[type="file"] { display: none; }
 
-        #status {
-            margin-top: 15px;
-            font-weight: bold;
-            color: #64748b;
-        }
-
-        .counter { font-size: 18px; text-align: center; margin: 20px 0; font-weight: bold; }
-
-        .controls { display: flex; gap: 10px; justify-content: center; max-width: 500px; margin: 0 auto; }
-        button { padding: 12px 18px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .counter { font-size: 18px; text-align: center; margin: 15px 0; font-weight: bold; color: #1e293b; }
+        
+        .controls { display: flex; gap: 10px; margin-top: 15px; justify-content: center; max-width: 500px; margin-left: auto; margin-right: auto; }
+        button { padding: 12px 18px; font-size: 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .btn-excel { background-color: #16a34a; color: white; flex: 1; }
         .btn-clear { background-color: #dc2626; color: white; }
 
@@ -67,114 +66,115 @@
         }
 
         th, td { padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0; }
-        th { background-color: #334155; color: white; }
+        th { background-color: #1e293b; color: white; }
         .tag-modello { font-weight: bold; color: #0284c7; }
         .tag-telaio { font-weight: bold; color: #16a34a; font-family: monospace; font-size: 16px; }
     </style>
 </head>
 <body>
 
-    <h2>Acquisizione Modello & Telaio</h2>
+    <h2>Scanner Modello e Telaio</h2>
 
-    <div class="upload-section">
-        <label for="image-input" class="btn-upload">📷 Scatta o Carica Foto</label>
-        <input type="file" id="image-input" accept="image/*" capture="environment">
-        <div id="status">Pronto per la lettura</div>
+    <!-- Area Fotocamera Live -->
+    <div id="reader"></div>
+
+    <!-- Tasto Carica da Galleria (Sbloccato) -->
+    <div class="file-input-wrapper">
+        <label for="image-upload" class="file-btn">📁 Carica Foto da Galleria</label>
+        <input type="file" id="image-upload" accept="image/*">
     </div>
 
     <div class="counter">
-        Schede Elaborate: <span id="count">0</span>
+        Veicoli Acquisiti: <span id="count">0</span>
     </div>
 
     <div class="controls">
-        <button class="btn-excel" onclick="exportToExcel()">Scarica Excel</button>
-        <button class="btn-clear" onclick="clearList()">Azzera</button>
+        <button class="btn-excel" onclick="exportToExcel()">Scarica File Excel</button>
+        <button class="btn-clear" onclick="clearList()">Azzera Lista</button>
     </div>
 
     <table>
         <thead>
             <tr>
                 <th>N°</th>
-                <th>Modello (3 cifre)</th>
-                <th>Telaio (8 caratteri)</th>
+                <th>Modello</th>
+                <th>Telaio (8 char)</th>
             </tr>
         </thead>
         <tbody id="data-table">
-            <!-- I dati visivi compariranno qui -->
+            <!-- I dati acquisiti appariranno qui -->
         </tbody>
     </table>
 
     <script>
-        let records = [];
+        let vehicleDatabase = [];
+        let html5QrcodeScanner;
 
-        document.getElementById('image-input').addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+        // Funzione per analizzare i codici delle etichette auto
+        function parseLabelBarcode(scannedText) {
+            if (!scannedText) return null;
+            
+            // Pulisce il testo da asterischi, spazi o trattini
+            let clean = scannedText.replace(/[* \-_]/g, '').trim().toUpperCase();
 
-            const statusEl = document.getElementById('status');
-            statusEl.innerText = "⏳ Lettura testo in corso...";
+            let modello = "N/D";
+            let telaio = "N/D";
 
-            try {
-                // Analisi OCR della foto caricata
-                const worker = await Tesseract.createWorker('eng');
-                const ret = await worker.recognize(file);
-                await worker.terminate();
-
-                const text = ret.data.text.toUpperCase();
-                console.log("Testo rilevato dall'immagine:\n", text);
-
-                // Estrazione Modello (3 cifre) e Telaio (8 caratteri alfanumerici)
-                const parsedData = parseModelloETelaio(text);
-
-                if (parsedData.modello && parsedData.telaio) {
-                    records.push(parsedData);
-                    updateTable();
-                    statusEl.innerText = "✅ Acquisito con successo!";
-                    if (navigator.vibrate) navigator.vibrate(200);
-                } else {
-                    statusEl.innerText = "❌ Impossibile rilevare Modello/Telaio. Riprova con una foto più nitida.";
-                }
-
-            } catch (err) {
-                console.error(err);
-                statusEl.innerText = "❌ Errore durante la lettura.";
+            // CASO 1: Codice a barre grande centrale (es. S384651QS0PU11937 o S32364J233J136084)
+            if (clean.startsWith('S') && clean.length >= 15) {
+                // Estraggo le 3 cifre del Modello (dopo lo stabilimento di 2 cifre)
+                modello = clean.substring(3, 6); 
+                // Estraggo gli ultimi 8 caratteri del Telaio
+                telaio = clean.slice(-8);
+                return { modello, telaio };
             }
 
-            // Resetta l'input file per permettere di scattare nuovamente la stessa foto se necessario
-            e.target.value = '';
-        });
-
-        function parseModelloETelaio(text) {
-            let modello = null;
-            let telaio = null;
-
-            // Pulisce il testo e splitta per linee/parole
-            const lines = text.split('\n');
-
-            // Cerca Modello (3 cifre numeriche)
-            const modelloMatch = text.match(/\b\d{3}\b/);
-            if (modelloMatch) {
-                modello = modelloMatch[0];
+            // CASO 2: Codice VIN 17 caratteri (es. ZFA5FBBT1TJ136084 o VYENJ5BT0TPU11937)
+            if (clean.length === 17) {
+                telaio = clean.slice(-8); // Prende gli ultimi 8 caratteri del telaio
+                // Mappatura automatica modello nota se il codice viene dal VIN
+                if (telaio.startsWith("TJ")) modello = "364";
+                if (telaio.startsWith("PU") || telaio.startsWith("TPU")) modello = "465";
+                return { modello, telaio };
             }
 
-            // Cerca Telaio (8 caratteri alfanumerici es. TJ136084, TPU13059)
-            const telaioMatch = text.match(/\b[A-Z]{2,3}\d{5,6}\b/);
-            if (telaioMatch) {
-                telaio = telaioMatch[0];
+            // CASO 3: Stringa diretta di 8 caratteri (es. TPU11937 o TJ136084)
+            if (clean.length === 8 && /^[A-Z0-9]{8}$/.test(clean)) {
+                telaio = clean;
+                if (telaio.startsWith("TJ")) modello = "364";
+                if (telaio.startsWith("PU")) modello = "465";
+                return { modello, telaio };
             }
 
-            return { modello, telaio };
+            return null;
         }
 
-        function updateTable() {
-            document.getElementById('count').innerText = records.length;
-            const tableBody = document.getElementById('data-table');
+        function onScanSuccess(decodedText) {
+            let result = parseLabelBarcode(decodedText);
+
+            if (result && result.telaio !== "N/D") {
+                // Evita duplicati controllando se il telaio è già presente
+                let exists = vehicleDatabase.some(item => item.telaio === result.telaio);
+
+                if (!exists) {
+                    vehicleDatabase.push(result);
+                    updateUI();
+                    if (navigator.vibrate) navigator.vibrate(200);
+                }
+            } else {
+                console.log("Codice non riconosciuto:", decodedText);
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('count').innerText = vehicleDatabase.length;
+            let tableBody = document.getElementById('data-table');
             tableBody.innerHTML = '';
 
-            records.slice().reverse().forEach((item, index) => {
-                const row = document.createElement('tr');
+            vehicleDatabase.slice().reverse().forEach((item, index) => {
+                let row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${records.length - index}</td>
+                    <td>${vehicleDatabase.length - index}</td>
                     <td class="tag-modello">${item.modello}</td>
                     <td class="tag-telaio">${item.telaio}</td>
                 `;
@@ -182,35 +182,66 @@
             });
         }
 
+        // Gestione Caricamento Foto da Galleria
+        document.getElementById('image-upload').addEventListener('change', function (e) {
+            if (e.target.files.length === 0) return;
+
+            const file = e.target.files[0];
+            const html5QrCode = new Html5Qrcode("reader");
+
+            html5QrCode.scanFile(file, true)
+                .then(decodedText => {
+                    onScanSuccess(decodedText);
+                })
+                .catch(err => {
+                    alert("Impossibile decodificare l'immagine. Assicurati che il codice a barre centrale o in basso sia ben visibile.");
+                });
+
+            // Resetta l'input file per consentire nuovi caricamenti
+            e.target.value = '';
+        });
+
+        // Esportazione Excel
         function exportToExcel() {
-            if (records.length === 0) {
-                alert("Nessun dato da esportare!");
+            if (vehicleDatabase.length === 0) {
+                alert("Nessun veicolo acquisito!");
                 return;
             }
 
-            const excelData = records.map((item, i) => ({
-                "N°": i + 1,
+            let data = vehicleDatabase.map((item, i) => ({ 
+                "N°": i + 1, 
                 "MODELLO": item.modello,
-                "TELAIO": item.telaio,
-                "DATA ACQUISIZIONE": new Date().toLocaleString()
+                "TELAIO": item.telaio, 
+                "DATA/ORA ACQUISIZIONE": new Date().toLocaleString() 
             }));
-
-            const worksheet = XLSX.utils.json_to_sheet(excelData);
+            
+            let worksheet = XLSX.utils.json_to_sheet(data);
             worksheet['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 20 }, { wch: 22 }];
 
-            const workbook = XLSX.utils.book_new();
+            let workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Modello_Telaio");
 
-            XLSX.writeFile(workbook, `Report_Modello_Telaio_${new Date().toISOString().slice(0,10)}.xlsx`);
+            XLSX.writeFile(workbook, `Report_Veicoli_${new Date().toISOString().slice(0,10)}.xlsx`);
         }
 
         function clearList() {
-            if (confirm("Cancellare tutti i dati registrati?")) {
-                records = [];
-                updateTable();
-                document.getElementById('status').innerText = "Pronto per la lettura";
+            if (confirm("Cancellare la lista dei veicoli?")) {
+                vehicleDatabase = [];
+                updateUI();
             }
         }
+
+        // Avvio Scanner Fotocamera Live
+        html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { 
+                fps: 15, 
+                qrbox: { width: 320, height: 150 },
+                aspectRatio: 1.0
+            },
+            false
+        );
+        html5QrcodeScanner.render(onScanSuccess);
     </script>
 </body>
 </html>
